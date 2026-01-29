@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/zalando/go-keyring"
 
+	"github.com/ankitpokhrel/jira-cli/pkg/confluence"
 	"github.com/ankitpokhrel/jira-cli/pkg/jira"
 	"github.com/ankitpokhrel/jira-cli/pkg/jira/filter"
 	"github.com/ankitpokhrel/jira-cli/pkg/netrc"
@@ -13,14 +14,13 @@ import (
 
 const clientTimeout = 15 * time.Second
 
-var jiraClient *jira.Client
+var (
+	jiraClient  *jira.Client
+	conflClient *confluence.Client
+)
 
-// Client initializes and returns jira client.
-func Client(config jira.Config) *jira.Client {
-	if jiraClient != nil {
-		return jiraClient
-	}
-
+// resolveConfig fills in missing config fields from viper, netrc, and keyring.
+func resolveConfig(config *jira.Config) {
 	if config.Server == "" {
 		config.Server = viper.GetString("server")
 	}
@@ -49,8 +49,6 @@ func Client(config jira.Config) *jira.Client {
 		config.Insecure = &insecure
 	}
 
-	// MTLS
-
 	if config.MTLSConfig.CaCert == "" {
 		config.MTLSConfig.CaCert = viper.GetString("mtls.ca_cert")
 	}
@@ -60,6 +58,15 @@ func Client(config jira.Config) *jira.Client {
 	if config.MTLSConfig.ClientKey == "" {
 		config.MTLSConfig.ClientKey = viper.GetString("mtls.client_key")
 	}
+}
+
+// Client initializes and returns jira client.
+func Client(config jira.Config) *jira.Client {
+	if jiraClient != nil {
+		return jiraClient
+	}
+
+	resolveConfig(&config)
 
 	jiraClient = jira.NewClient(
 		config,
@@ -68,6 +75,23 @@ func Client(config jira.Config) *jira.Client {
 	)
 
 	return jiraClient
+}
+
+// ConfluenceClient initializes and returns a Confluence client.
+func ConfluenceClient(config jira.Config) *confluence.Client {
+	if conflClient != nil {
+		return conflClient
+	}
+
+	resolveConfig(&config)
+
+	conflClient = confluence.NewClient(
+		config,
+		confluence.WithTimeout(clientTimeout),
+		confluence.WithInsecureTLS(*config.Insecure),
+	)
+
+	return conflClient
 }
 
 // DefaultClient returns default jira client.
